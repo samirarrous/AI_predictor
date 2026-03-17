@@ -21,7 +21,7 @@ model = LinearRegression()
 # 5. Entraîner
 model.fit(X_train, y_train)
 
-# 6. Prédire
+# 6. Prédire pour une surface de 75m²
 prediction = model.predict([[75]])
 
 print("Prix prédit pour 75m² :", prediction)
