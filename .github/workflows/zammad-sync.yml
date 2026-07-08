@@ -30,6 +30,7 @@ jobs:
               # --- DEBUG TEMP : Query links for ticket ID 30 ---
               Write-Host "=== DEBUG: Fetching links for ticket ID 30 using HttpClient ==="
               try {
+                Add-Type -AssemblyName System.Net.Http
                 $client = New-Object System.Net.Http.HttpClient
                 $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $env:ZAMMAD_TOKEN)
                 
