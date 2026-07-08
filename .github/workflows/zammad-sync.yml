@@ -10,8 +10,8 @@ jobs:
     steps:
       - name: Create Zammad ticket from GitHub issue
         env:
-          ZAMMAD_URL: ${{ http://localhost:8080 }}
-          ZAMMAD_TOKEN: ${{ YxwWnONGmmHb-FR_oUlt8m7DrFf14Q7INXZFbBXqojRDELfbYJH_jXYZwhF6tB7K }}
+          ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
+          ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
