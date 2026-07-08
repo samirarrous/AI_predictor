@@ -69,37 +69,41 @@ jobs:
               if ($ticketId) {
                 Write-Host "Adding link note to ticket ID $ticketId ..."
 
-                $articleJson = @{
-                  ticket_id = $ticketId
+                $articleBody = @{
+                  ticket_id = [int]$ticketId
                   subject   = "GitHub Issue Link"
                   body      = "GitHub issue created: $env:ISSUE_URL"
                   type      = "note"
                   internal  = $false
-                } | ConvertTo-Json -Depth 5
+                }
 
-                $articleResponse = Invoke-WebRequest `
+                Write-Host "Payload: $(($articleBody | ConvertTo-Json -Depth 5))"
+
+                $articleResult = Invoke-RestMethod `
                   -Uri "$env:ZAMMAD_URL/api/v1/ticket_articles" `
                   -Method POST `
                   -Headers $headers `
                   -ContentType "application/json" `
-                  -Body $articleJson
+                  -Body ($articleBody | ConvertTo-Json -Depth 5) `
+                  -ErrorAction Stop
 
-                Write-Host "HTTP status (note): $($articleResponse.StatusCode)"
-                Write-Host "Response: $($articleResponse.Content)"
+                Write-Host "Note created: $($articleResult | ConvertTo-Json -Depth 3)"
               } else {
                 Write-Warning "Ticket #$ticketNumber not found after $($page * $perPage) tickets checked."
               }
 
             } catch {
-              Write-Error "Error linking ticket: $_"
-              $errResponse = $_.Exception.Response
-              if ($errResponse -ne $null) {
+              Write-Host "=== EXCEPTION ==="
+              Write-Host "Message  : $($_.Exception.Message)"
+              Write-Host "Type     : $($_.Exception.GetType().FullName)"
+              if ($_.Exception.Response -ne $null) {
                 try {
-                  $stream  = $errResponse.GetResponseStream()
+                  $stream  = $_.Exception.Response.GetResponseStream()
                   $errBody = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
-                  Write-Host "Zammad API error response: $errBody"
+                  Write-Host "Zammad API error body: $errBody"
                 } catch {}
               }
+              Write-Error "Error linking ticket: $_"
             }
 
             exit 0
