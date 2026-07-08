@@ -24,101 +24,82 @@ jobs:
 
             try {
               $headers = @{
-                Authorization = "Bearer $env:ZAMMAD_TOKEN"
+                Authorization  = "Bearer $env:ZAMMAD_TOKEN"
+                "Content-Type" = "application/json"
               }
               
-              $ticketId = $null
-              $maxRetries = 5
-              $retryCount = 0
-              
-              while ($retryCount -lt $maxRetries -and -not $ticketId) {
-                if ($retryCount -gt 0) {
-                  Write-Host "Ticket non trouvé dans l'index. Attente de 3 secondes avant réessai ($retryCount/$maxRetries)..."
-                  Start-Sleep -Seconds 3
-                }
-                
-                # Essai 1 : Recherche avec l'attribut number
-                $queryEncoded = [uri]::EscapeDataString("number:$ticketNumber")
-                $searchUri = "$env:ZAMMAD_URL/api/v1/tickets/search?query=$queryEncoded"
-                Write-Host "Recherche par numéro via : $searchUri"
-                try {
-                  $searchResponse = Invoke-RestMethod -Uri $searchUri -Method GET -Headers $headers -ContentType "application/json"
-                  if ($searchResponse -and $searchResponse.record_ids -and $searchResponse.record_ids.Count -gt 0) {
-                    $ticketId = $searchResponse.record_ids[0]
-                    Write-Host "Ticket ID trouvé par numéro : $ticketId"
-                    break
-                  }
-                } catch {
-                  Write-Host "Recherche par numéro a échoué ou a renvoyé une erreur: $_"
-                }
-                
-                # Essai 2 : Recherche plein texte (au cas où l'indexation par numéro diffère)
-                $queryTextEncoded = [uri]::EscapeDataString($ticketNumber)
-                $searchUriText = "$env:ZAMMAD_URL/api/v1/tickets/search?query=$queryTextEncoded"
-                Write-Host "Recherche plein texte via : $searchUriText"
-                try {
-                  $searchResponseText = Invoke-RestMethod -Uri $searchUriText -Method GET -Headers $headers -ContentType "application/json"
-                  if ($searchResponseText -and $searchResponseText.record_ids -and $searchResponseText.record_ids.Count -gt 0) {
-                    $ticketId = $searchResponseText.record_ids[0]
-                    Write-Host "Ticket ID trouvé par recherche plein texte : $ticketId"
-                    break
-                  }
-                } catch {
-                  Write-Host "Recherche plein texte a échoué: $_"
-                }
-                
-                # Essai 3 : Vérification si le numéro de ticket est l'ID directement
-                try {
-                  $directUri = "$env:ZAMMAD_URL/api/v1/tickets/$ticketNumber"
-                  Write-Host "Tentative de récupération directe par ID via : $directUri"
-                  $directResponse = Invoke-RestMethod -Uri $directUri -Method GET -Headers $headers -ContentType "application/json"
-                  if ($directResponse -and $directResponse.id) {
-                    $ticketId = $directResponse.id
-                    Write-Host "Ticket ID trouvé par récupération directe : $ticketId"
-                    break
-                  }
-                } catch {
-                  Write-Host "Récupération directe par ID a échoué (normal si le numéro n'est pas l'ID): $_"
-                }
+              # --- Stratégie fiable : parcourir les tickets via l'API REST standard (sans Elasticsearch) ---
+              $ticketId  = $null
+              $page      = 1
+              $perPage   = 50
+              $maxPages  = 20   # limite de sécurité : 50 × 20 = 1000 tickets maximum parcourus
 
-                $retryCount++
+              Write-Host "Recherche du ticket Zammad numéro '$ticketNumber' dans la liste des tickets..."
+
+              while (-not $ticketId -and $page -le $maxPages) {
+                $listUri  = "$env:ZAMMAD_URL/api/v1/tickets?page=$page&per_page=$perPage&sort_by=created_at&order_by=desc"
+                Write-Host "  → Récupération page $page : $listUri"
+                
+                $tickets = Invoke-RestMethod -Uri $listUri -Method GET -Headers $headers
+                
+                if (-not $tickets -or $tickets.Count -eq 0) {
+                  Write-Host "  → Aucun ticket sur cette page, arrêt de la recherche."
+                  break
+                }
+                
+                Write-Host "  → $($tickets.Count) ticket(s) reçu(s) sur cette page."
+                
+                foreach ($t in $tickets) {
+                  Write-Host "    Vérification ticket id=$($t.id) number='$($t.number)'"
+                  if ($t.number -eq $ticketNumber) {
+                    $ticketId = $t.id
+                    Write-Host "  ✓ Ticket trouvé ! ID interne = $ticketId"
+                    break
+                  }
+                }
+                
+                if ($tickets.Count -lt $perPage) {
+                  Write-Host "  → Dernière page atteinte, arrêt."
+                  break
+                }
+                
+                $page++
               }
 
               if ($ticketId) {
-                Write-Host "Ticket ID final retenu : $ticketId. Ajout de la note de liaison..."
+                Write-Host "Ajout de la note de liaison sur le ticket ID $ticketId..."
                 
                 $articleJson = @{
                   ticket_id = $ticketId
-                  subject = "Lien GitHub"
-                  body = "Lien de l'issue GitHub créée : $env:ISSUE_URL"
-                  type = "note"
-                  internal = $false
+                  subject   = "Lien GitHub"
+                  body      = "Issue GitHub associée : $env:ISSUE_URL"
+                  type      = "note"
+                  internal  = $false
                 } | ConvertTo-Json -Depth 5
                 
                 $articleResponse = Invoke-WebRequest `
                   -Uri "$env:ZAMMAD_URL/api/v1/ticket_articles" `
                   -Method POST `
                   -Headers $headers `
-                  -ContentType "application/json" `
                   -Body $articleJson
                 
                 Write-Host "Code HTTP (note) : $($articleResponse.StatusCode)"
-                Write-Host "Réponse de la création de note : $($articleResponse.Content)"
+                Write-Host "Réponse : $($articleResponse.Content)"
               } else {
-                Write-Warning "Aucun ticket trouvé dans Zammad pour le numéro #$ticketNumber après toutes les tentatives."
+                Write-Warning "Ticket Zammad #$ticketNumber introuvable dans les $($($page-1) * $perPage) tickets consultés."
               }
+
             } catch {
               Write-Error "Erreur lors de la liaison du ticket : $_"
-              if ($_.Exception -and $_.Exception.Response) {
-                try {
-                  $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-                  $responseBody = $reader.ReadToEnd()
-                  Write-Host "Corps de la réponse d'erreur de l'API : $responseBody"
-                } catch {}
+              if ($_.Exception.Response) {
+                $stream = $_.Exception.Response.GetResponseStream()
+                $body   = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
+                Write-Host "Réponse d'erreur de l'API Zammad : $body"
               }
             }
             exit 0
           }
+
 
 
           Write-Host "Création du ticket Zammad..."
