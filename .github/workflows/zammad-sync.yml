@@ -18,10 +18,46 @@ jobs:
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          if ($env:ISSUE_TITLE -like "Ticket Zammad #*") {
-            Write-Host "Cette issue provient de Zammad, on ne recrée pas de ticket."
+          if ($env:ISSUE_TITLE -match '^Ticket Zammad #(\d+)') {
+            $ticketNumber = $Matches[1]
+            Write-Host "Cette issue provient de Zammad (ticket #$ticketNumber). Liaison de l'issue au ticket..."
+
+            try {
+              $searchUri = "$env:ZAMMAD_URL/api/v1/tickets/search?query=number:$ticketNumber"
+              $headers = @{
+                Authorization = "Bearer $env:ZAMMAD_TOKEN"
+              }
+              $searchResponse = Invoke-RestMethod -Uri $searchUri -Method GET -Headers $headers -ContentType "application/json"
+              
+              if ($searchResponse -and $searchResponse.record_ids -and $searchResponse.record_ids.Count -gt 0) {
+                $ticketId = $searchResponse.record_ids[0]
+                Write-Host "Ticket ID trouvé : $ticketId. Ajout de la note de liaison..."
+                
+                $articleJson = @{
+                  ticket_id = $ticketId
+                  subject = "Lien GitHub"
+                  body = "Lien de l'issue GitHub créée : $env:ISSUE_URL"
+                  type = "note"
+                  internal = $false
+                } | ConvertTo-Json -Depth 5
+                
+                $articleResponse = Invoke-WebRequest `
+                  -Uri "$env:ZAMMAD_URL/api/v1/ticket_articles" `
+                  -Method POST `
+                  -Headers $headers `
+                  -ContentType "application/json" `
+                  -Body $articleJson
+                
+                Write-Host "Code HTTP (note) : $($articleResponse.StatusCode)"
+              } else {
+                Write-Warning "Aucun ticket trouvé dans Zammad pour le numéro #$ticketNumber"
+              }
+            } catch {
+              Write-Error "Erreur lors de la liaison du ticket : $_"
+            }
             exit 0
           }
+
 
           Write-Host "Création du ticket Zammad..."
 
