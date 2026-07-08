@@ -1,3 +1,13 @@
+name: Sync GitHub Issues with Zammad
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  sync:
+    runs-on: self-hosted
+    steps:
       - name: Create Zammad ticket from GitHub issue
         shell: pwsh
         env:
@@ -7,9 +17,7 @@
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-
         run: |
-
           if ($env:ISSUE_TITLE -like "Ticket Zammad #*") {
             Write-Host "Cette issue provient de Zammad, on ne recrée pas de ticket."
             exit 0
@@ -29,7 +37,6 @@
               }
           } | ConvertTo-Json -Depth 5
 
-
           $response = Invoke-WebRequest `
               -Uri "$env:ZAMMAD_URL/api/v1/tickets" `
               -Method POST `
@@ -38,7 +45,6 @@
               } `
               -ContentType "application/json" `
               -Body $json
-
 
           Write-Host "Code HTTP : $($response.StatusCode)"
           Write-Host "Réponse : $($response.Content)"
