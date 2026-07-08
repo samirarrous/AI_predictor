@@ -9,7 +9,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Create Zammad ticket from GitHub issue
-        shell: pwsh
+        shell: powershell
         env:
           ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
           ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
