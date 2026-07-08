@@ -15,29 +15,39 @@ jobs:
           ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
         run: |
           import os, urllib.request, json
-          url = f"{os.environ['ZAMMAD_URL']}/api/v1/links"
-          headers = {
-              'Authorization': f'Bearer {os.environ["ZAMMAD_TOKEN"]}',
-              'Content-Type': 'application/json'
-          }
-          body = {
-              'link_object': 'Ticket',
-              'link_object_value': '30'
-          }
-          req = urllib.request.Request(
-              url,
-              data=json.dumps(body).encode('utf-8'),
-              headers=headers,
-              method='GET'
-          )
-          try:
-              with urllib.request.urlopen(req) as response:
-                  status = response.getcode()
-                  html = response.read().decode('utf-8')
-                  print("Python status:", status)
-                  print("Python response:", json.dumps(json.loads(html), indent=4))
-          except Exception as e:
-              print("Python error:", e)
+          
+          def call_api(desc, body=None):
+              print(f"--- {desc} ---")
+              url = f"{os.environ['ZAMMAD_URL']}/api/v1/links"
+              headers = {
+                  'Authorization': f'Bearer {os.environ["ZAMMAD_TOKEN"]}',
+                  'Content-Type': 'application/json'
+              }
+              data = json.dumps(body).encode('utf-8') if body else None
+              req = urllib.request.Request(url, data=data, headers=headers, method='GET')
+              try:
+                  with urllib.request.urlopen(req) as res:
+                      print("Status:", res.getcode())
+                      print("Response:", json.dumps(json.loads(res.read().decode('utf-8')), indent=4))
+              except Exception as e:
+                  print("Error:", e)
+                  if hasattr(e, 'read'):
+                      print("Error Body:", e.read().decode('utf-8'))
+
+          # Test 1: No body
+          call_api("Test 1: No body")
+
+          # Test 2: Integer ID
+          call_api("Test 2: Integer ID 30", {
+              "link_object": "Ticket",
+              "link_object_value": 30
+          })
+
+          # Test 3: String ID
+          call_api("Test 3: String ID '30'", {
+              "link_object": "Ticket",
+              "link_object_value": "30"
+          })
 
       - name: Create Zammad ticket from GitHub issue
         shell: powershell
