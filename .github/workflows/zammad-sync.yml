@@ -27,6 +27,16 @@ jobs:
                 Authorization = "Bearer $env:ZAMMAD_TOKEN"
               }
 
+              # --- DEBUG TEMP : Query links for ticket ID 30 ---
+              Write-Host "=== DEBUG: Fetching links for ticket ID 30 ==="
+              try {
+                $debugLinks = Invoke-RestMethod -Uri "$env:ZAMMAD_URL/api/v1/links?link_object=Ticket&link_object_value=30" -Method GET -Headers $headers
+                Write-Host "Links JSON: $(($debugLinks | ConvertTo-Json -Depth 5))"
+              } catch {
+                Write-Host "Failed to fetch debug links: $_"
+              }
+              Write-Host "=== END DEBUG ==="
+
               $ticketId = $null
               $page     = 1
               $perPage  = 50
