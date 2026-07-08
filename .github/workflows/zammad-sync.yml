@@ -24,8 +24,7 @@ jobs:
 
             try {
               $headers = @{
-                Authorization  = "Bearer $env:ZAMMAD_TOKEN"
-                "Content-Type" = "application/json"
+                Authorization = "Bearer $env:ZAMMAD_TOKEN"
               }
 
               $ticketId = $null
@@ -82,6 +81,7 @@ jobs:
                   -Uri "$env:ZAMMAD_URL/api/v1/ticket_articles" `
                   -Method POST `
                   -Headers $headers `
+                  -ContentType "application/json" `
                   -Body $articleJson
 
                 Write-Host "HTTP status (note): $($articleResponse.StatusCode)"
@@ -92,10 +92,13 @@ jobs:
 
             } catch {
               Write-Error "Error linking ticket: $_"
-              if ($_.Exception.Response) {
-                $stream = $_.Exception.Response.GetResponseStream()
-                $errBody = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
-                Write-Host "Zammad API error response: $errBody"
+              $errResponse = $_.Exception.Response
+              if ($errResponse -ne $null) {
+                try {
+                  $stream  = $errResponse.GetResponseStream()
+                  $errBody = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
+                  Write-Host "Zammad API error response: $errBody"
+                } catch {}
               }
             }
 
