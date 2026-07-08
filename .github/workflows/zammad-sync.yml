@@ -1,0 +1,54 @@
+name: Sync GitHub Issues with Zammad
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Zammad ticket from GitHub issue
+        env:
+          ZAMMAD_URL: ${{ http://localhost:8080 }}
+          ZAMMAD_TOKEN: ${{ YxwWnONGmmHb-FR_oUlt8m7DrFf14Q7INXZFbBXqojRDELfbYJH_jXYZwhF6tB7K }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          # Évite la boucle infinie : si l'issue vient déjà d'un ticket Zammad, on ne fait rien
+          if [[ "$ISSUE_TITLE" == "Ticket Zammad #"* ]]; then
+            echo "Cette issue provient de Zammad, on ne recrée pas de ticket. Fin."
+            exit 0
+          fi
+
+          echo "Nouvelle issue GitHub externe détectée, création d'un ticket Zammad..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$ZAMMAD_URL/api/v1/tickets" \
+            -H "Authorization: Bearer $ZAMMAD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"title\": \"[GitHub #$ISSUE_NUMBER] $ISSUE_TITLE\",
+              \"group\": \"Users\",
+              \"customer_id\": \"guess:git@github.com\",
+              \"article\": {
+                \"subject\": \"$ISSUE_TITLE\",
+                \"body\": \"$ISSUE_BODY\n\nLien GitHub : $ISSUE_URL\",
+                \"type\": \"note\",
+                \"internal\": false
+              }
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Code HTTP reçu : $HTTP_CODE"
+          echo "Réponse : $BODY"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Ticket Zammad créé avec succès."
+          else
+            echo "Échec de la création du ticket Zammad."
+            exit 1
+          fi
