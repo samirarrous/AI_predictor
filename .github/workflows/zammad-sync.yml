@@ -14,7 +14,8 @@ jobs:
           ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
           ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
         run: |
-          import os, requests, json
+          import os, urllib.request, json
+          url = f"{os.environ['ZAMMAD_URL']}/api/v1/links"
           headers = {
               'Authorization': f'Bearer {os.environ["ZAMMAD_TOKEN"]}',
               'Content-Type': 'application/json'
@@ -23,10 +24,18 @@ jobs:
               'link_object': 'Ticket',
               'link_object_value': '30'
           }
+          req = urllib.request.Request(
+              url,
+              data=json.dumps(body).encode('utf-8'),
+              headers=headers,
+              method='GET'
+          )
           try:
-              res = requests.get(f'{os.environ["ZAMMAD_URL"]}/api/v1/links', json=body, headers=headers)
-              print("Python status:", res.status_code)
-              print("Python response:", json.dumps(res.json(), indent=4))
+              with urllib.request.urlopen(req) as response:
+                  status = response.getcode()
+                  html = response.read().decode('utf-8')
+                  print("Python status:", status)
+                  print("Python response:", json.dumps(json.loads(html), indent=4))
           except Exception as e:
               print("Python error:", e)
 
