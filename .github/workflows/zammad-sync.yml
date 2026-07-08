@@ -7,8 +7,10 @@ on:
 jobs:
   sync:
     runs-on: self-hosted
+
     steps:
       - name: Create Zammad ticket from GitHub issue
+        shell: bash
         env:
           ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
           ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
