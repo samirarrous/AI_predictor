@@ -27,10 +27,25 @@ jobs:
               $headers = @{
                 Authorization = "Bearer $env:ZAMMAD_TOKEN"
               }
-              $searchResponse = Invoke-RestMethod -Uri $searchUri -Method GET -Headers $headers -ContentType "application/json"
               
-              if ($searchResponse -and $searchResponse.record_ids -and $searchResponse.record_ids.Count -gt 0) {
-                $ticketId = $searchResponse.record_ids[0]
+              $ticketId = $null
+              $maxRetries = 10
+              $retryCount = 0
+              
+              while ($retryCount -lt $maxRetries -and -not $ticketId) {
+                if ($retryCount -gt 0) {
+                  Write-Host "Ticket non trouvé dans l'index. Attente de 3 secondes avant réessai ($retryCount/$maxRetries)..."
+                  Start-Sleep -Seconds 3
+                }
+                
+                $searchResponse = Invoke-RestMethod -Uri $searchUri -Method GET -Headers $headers -ContentType "application/json"
+                if ($searchResponse -and $searchResponse.record_ids -and $searchResponse.record_ids.Count -gt 0) {
+                  $ticketId = $searchResponse.record_ids[0]
+                }
+                $retryCount++
+              }
+
+              if ($ticketId) {
                 Write-Host "Ticket ID trouvé : $ticketId. Ajout de la note de liaison..."
                 
                 $articleJson = @{
