@@ -8,6 +8,28 @@ jobs:
   sync:
     runs-on: self-hosted
     steps:
+      - name: Debug Zammad links
+        shell: python
+        env:
+          ZAMMAD_URL: ${{ secrets.ZAMMAD_URL }}
+          ZAMMAD_TOKEN: ${{ secrets.ZAMMAD_TOKEN }}
+        run: |
+          import os, requests, json
+          headers = {
+              'Authorization': f'Bearer {os.environ["ZAMMAD_TOKEN"]}',
+              'Content-Type': 'application/json'
+          }
+          body = {
+              'link_object': 'Ticket',
+              'link_object_value': '30'
+          }
+          try:
+              res = requests.get(f'{os.environ["ZAMMAD_URL"]}/api/v1/links', json=body, headers=headers)
+              print("Python status:", res.status_code)
+              print("Python response:", json.dumps(res.json(), indent=4))
+          except Exception as e:
+              print("Python error:", e)
+
       - name: Create Zammad ticket from GitHub issue
         shell: powershell
         env:
@@ -27,33 +49,7 @@ jobs:
                 Authorization = "Bearer $env:ZAMMAD_TOKEN"
               }
 
-              # --- DEBUG TEMP : Query links for ticket ID 30 ---
-              Write-Host "=== DEBUG: Fetching links for ticket ID 30 using HttpClient ==="
-              try {
-                Add-Type -AssemblyName System.Net.Http
-                $client = New-Object System.Net.Http.HttpClient
-                $client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", "Bearer $env:ZAMMAD_TOKEN")
-                
-                $request = New-Object System.Net.Http.HttpRequestMessage
-                $request.Method = [System.Net.Http.HttpMethod]::Get
-                $request.RequestUri = New-Object Uri("$env:ZAMMAD_URL/api/v1/links")
-                
-                $body = @{
-                  link_object = "Ticket"
-                  link_object_value = "30"
-                } | ConvertTo-Json -Depth 5
-                
-                $request.Content = New-Object System.Net.Http.StringContent($body, [System.Text.Encoding]::UTF8, "application/json")
-                
-                $response = $client.SendAsync($request).Result
-                $responseBody = $response.Content.ReadAsStringAsync().Result
-                
-                Write-Host "HttpClient Status: $($response.StatusCode)"
-                Write-Host "HttpClient Response JSON: $responseBody"
-              } catch {
-                Write-Host "Failed to fetch debug links with HttpClient: $_"
-              }
-              Write-Host "=== END DEBUG ==="
+
 
               $ticketId = $null
               $page     = 1
