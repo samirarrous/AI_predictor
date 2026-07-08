@@ -28,12 +28,29 @@ jobs:
               }
 
               # --- DEBUG TEMP : Query links for ticket ID 30 ---
-              Write-Host "=== DEBUG: Fetching links for ticket ID 30 ==="
+              Write-Host "=== DEBUG: Fetching links for ticket ID 30 using HttpClient ==="
               try {
-                $debugLinks = Invoke-RestMethod -Uri "$env:ZAMMAD_URL/api/v1/links?link_object=Ticket&link_object_value=30" -Method GET -Headers $headers
-                Write-Host "Links JSON: $(($debugLinks | ConvertTo-Json -Depth 5))"
+                $client = New-Object System.Net.Http.HttpClient
+                $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $env:ZAMMAD_TOKEN)
+                
+                $request = New-Object System.Net.Http.HttpRequestMessage
+                $request.Method = [System.Net.Http.HttpMethod]::Get
+                $request.RequestUri = New-Object Uri("$env:ZAMMAD_URL/api/v1/links")
+                
+                $body = @{
+                  link_object = "Ticket"
+                  link_object_value = "30"
+                } | ConvertTo-Json -Depth 5
+                
+                $request.Content = New-Object System.Net.Http.StringContent($body, [System.Text.Encoding]::UTF8, "application/json")
+                
+                $response = $client.SendAsync($request).Result
+                $responseBody = $response.Content.ReadAsStringAsync().Result
+                
+                Write-Host "HttpClient Status: $($response.StatusCode)"
+                Write-Host "HttpClient Response JSON: $responseBody"
               } catch {
-                Write-Host "Failed to fetch debug links: $_"
+                Write-Host "Failed to fetch debug links with HttpClient: $_"
               }
               Write-Host "=== END DEBUG ==="
 
