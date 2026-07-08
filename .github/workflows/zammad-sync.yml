@@ -20,98 +20,98 @@ jobs:
         run: |
           if ($env:ISSUE_TITLE -match '^Ticket Zammad #(\d+)') {
             $ticketNumber = $Matches[1]
-            Write-Host "Cette issue provient de Zammad (ticket #$ticketNumber). Liaison de l'issue au ticket..."
+            Write-Host "Issue from Zammad (ticket #$ticketNumber). Linking issue to ticket..."
 
             try {
               $headers = @{
                 Authorization  = "Bearer $env:ZAMMAD_TOKEN"
                 "Content-Type" = "application/json"
               }
-              
-              # --- Stratégie fiable : parcourir les tickets via l'API REST standard (sans Elasticsearch) ---
-              $ticketId  = $null
-              $page      = 1
-              $perPage   = 50
-              $maxPages  = 20   # limite de sécurité : 50 × 20 = 1000 tickets maximum parcourus
 
-              Write-Host "Recherche du ticket Zammad numéro '$ticketNumber' dans la liste des tickets..."
+              $ticketId = $null
+              $page     = 1
+              $perPage  = 50
+              $maxPages = 20
+
+              Write-Host "Searching for Zammad ticket number $ticketNumber ..."
 
               while (-not $ticketId -and $page -le $maxPages) {
-                $listUri  = "$env:ZAMMAD_URL/api/v1/tickets?page=$page&per_page=$perPage&sort_by=created_at&order_by=desc"
-                Write-Host "  → Récupération page $page : $listUri"
-                
+                $listUri = "$env:ZAMMAD_URL/api/v1/tickets?page=$page&per_page=$perPage&sort_by=created_at&order_by=desc"
+                Write-Host "Fetching page $page : $listUri"
+
                 $tickets = Invoke-RestMethod -Uri $listUri -Method GET -Headers $headers
-                
+
                 if (-not $tickets -or $tickets.Count -eq 0) {
-                  Write-Host "  → Aucun ticket sur cette page, arrêt de la recherche."
+                  Write-Host "No tickets on this page. Stopping search."
                   break
                 }
-                
-                Write-Host "  → $($tickets.Count) ticket(s) reçu(s) sur cette page."
-                
+
+                Write-Host "Received $($tickets.Count) ticket(s) on page $page"
+
                 foreach ($t in $tickets) {
-                  Write-Host "    Vérification ticket id=$($t.id) number='$($t.number)'"
-                  if ($t.number -eq $ticketNumber) {
+                  Write-Host "Checking ticket id=$($t.id) number=$($t.number)"
+                  if ([string]$t.number -eq [string]$ticketNumber) {
                     $ticketId = $t.id
-                    Write-Host "  ✓ Ticket trouvé ! ID interne = $ticketId"
+                    Write-Host "FOUND! Internal ID = $ticketId"
                     break
                   }
                 }
-                
+
+                if ($ticketId) { break }
+
                 if ($tickets.Count -lt $perPage) {
-                  Write-Host "  → Dernière page atteinte, arrêt."
+                  Write-Host "Last page reached. Stopping."
                   break
                 }
-                
+
                 $page++
               }
 
               if ($ticketId) {
-                Write-Host "Ajout de la note de liaison sur le ticket ID $ticketId..."
-                
+                Write-Host "Adding link note to ticket ID $ticketId ..."
+
                 $articleJson = @{
                   ticket_id = $ticketId
-                  subject   = "Lien GitHub"
-                  body      = "Issue GitHub associée : $env:ISSUE_URL"
+                  subject   = "GitHub Issue Link"
+                  body      = "GitHub issue created: $env:ISSUE_URL"
                   type      = "note"
                   internal  = $false
                 } | ConvertTo-Json -Depth 5
-                
+
                 $articleResponse = Invoke-WebRequest `
                   -Uri "$env:ZAMMAD_URL/api/v1/ticket_articles" `
                   -Method POST `
                   -Headers $headers `
                   -Body $articleJson
-                
-                Write-Host "Code HTTP (note) : $($articleResponse.StatusCode)"
-                Write-Host "Réponse : $($articleResponse.Content)"
+
+                Write-Host "HTTP status (note): $($articleResponse.StatusCode)"
+                Write-Host "Response: $($articleResponse.Content)"
               } else {
-                Write-Warning "Ticket Zammad #$ticketNumber introuvable dans les $($($page-1) * $perPage) tickets consultés."
+                Write-Warning "Ticket #$ticketNumber not found after $($page * $perPage) tickets checked."
               }
 
             } catch {
-              Write-Error "Erreur lors de la liaison du ticket : $_"
+              Write-Error "Error linking ticket: $_"
               if ($_.Exception.Response) {
                 $stream = $_.Exception.Response.GetResponseStream()
-                $body   = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
-                Write-Host "Réponse d'erreur de l'API Zammad : $body"
+                $errBody = (New-Object System.IO.StreamReader($stream)).ReadToEnd()
+                Write-Host "Zammad API error response: $errBody"
               }
             }
+
             exit 0
           }
 
-
-
-          Write-Host "Création du ticket Zammad..."
+          Write-Host "Creating Zammad ticket from GitHub issue..."
 
           $json = @{
-              title = "[GitHub #$env:ISSUE_NUMBER] $env:ISSUE_TITLE"
-              group = "Users"
+              title       = "[GitHub #$env:ISSUE_NUMBER] $env:ISSUE_TITLE"
+              group       = "Users"
               customer_id = "guess:git@github.com"
-              article = @{
-                  subject = $env:ISSUE_TITLE
-                  body = "$env:ISSUE_BODY`n`nLien GitHub : $env:ISSUE_URL"
-                  type = "note"
+              article     = @{
+                  subject  = $env:ISSUE_TITLE
+                  body     = "$env:ISSUE_BODY`n`nGitHub link: $env:ISSUE_URL"
+                  type     = "note"
                   internal = $false
               }
           } | ConvertTo-Json -Depth 5
@@ -119,11 +119,9 @@ jobs:
           $response = Invoke-WebRequest `
               -Uri "$env:ZAMMAD_URL/api/v1/tickets" `
               -Method POST `
-              -Headers @{
-                  Authorization = "Bearer $env:ZAMMAD_TOKEN"
-              } `
+              -Headers @{ Authorization = "Bearer $env:ZAMMAD_TOKEN" } `
               -ContentType "application/json" `
               -Body $json
 
-          Write-Host "Code HTTP : $($response.StatusCode)"
-          Write-Host "Réponse : $($response.Content)"
+          Write-Host "HTTP status: $($response.StatusCode)"
+          Write-Host "Response: $($response.Content)"
